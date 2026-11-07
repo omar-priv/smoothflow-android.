@@ -241,9 +241,12 @@ def run_lab(lab_script: Path, root: Path, output: Path, timeout: int) -> tuple[i
         sys.executable, str(lab_script), "--root", str(root),
         "--output", str(output), "--timeout", str(timeout),
     ]
+    safe_env = os.environ.copy()
+    safe_env.pop("AI_API_KEY", None)
     result = subprocess.run(
         command, cwd=root, text=True, stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, timeout=max(timeout * 4, 600), check=False
+        stderr=subprocess.STDOUT, timeout=max(timeout * 4, 600),
+        env=safe_env, check=False
     )
     report_path = output / "report.json"
     if not report_path.is_file():
@@ -296,7 +299,8 @@ def main() -> int:
     root = Path(args.root).resolve()
     lab_script = Path(args.lab_script).resolve()
     output = Path(args.output).resolve()
-    api_key = os.environ.get("AI_API_KEY", "").strip()
+    # Remove the key from the inherited environment before any project tests run.
+    api_key = os.environ.pop("AI_API_KEY", "").strip()
     api_base = os.environ.get("AI_API_BASE_URL", "https://api.openai.com/v1").strip()
     model = os.environ.get("AI_MODEL", "gpt-4.1-mini").strip()
     cycles: list[dict] = []
