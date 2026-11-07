@@ -1,13 +1,22 @@
-# Copy to target project: .github/workflows/code-lab.yml
+# Copy this file to the target project as .github/workflows/code-lab.yml.
+# Add AI_API_KEY as a repository Actions secret before enabling auto_repair.
 name: Universal Code Lab
 on:
   push:
   pull_request:
   workflow_dispatch:
+
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
+
 jobs:
   lab:
     uses: omar-priv/smoothflow-android./.github/workflows/universal-lab.yml@main
     with:
       timeout: 300
+      auto_repair: true
+      ai_base_url: ${{ vars.AI_BASE_URL || 'https://api.openai.com/v1' }}
+      ai_model: ${{ vars.AI_MODEL || 'gpt-4.1-mini' }}
+    secrets:
+      AI_API_KEY: ${{ secrets.AI_API_KEY }}
