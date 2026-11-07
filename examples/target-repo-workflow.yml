@@ -1,0 +1,13 @@
+# Copy to target project: .github/workflows/code-lab.yml
+name: Universal Code Lab
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lab:
+    uses: omar-priv/smoothflow-android./.github/workflows/universal-lab.yml@main
+    with:
+      timeout: 300
