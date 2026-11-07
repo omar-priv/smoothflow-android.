@@ -1,0 +1,44 @@
+name: Universal Code Lab self-test
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout lab repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install YAML parser
+        run: python -m pip install pyyaml
+      - name: Compile Python files
+        run: python -m compileall -q tools tests
+      - name: Run Universal Code Lab against itself
+        run: python tools/lab.py --root . --output "$RUNNER_TEMP/lab-self-test" --timeout 120
+      - name: Validate workflow YAML syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          workflows = Path(".github/workflows")
+          files = sorted(workflows.glob("*.yml")) + sorted(workflows.glob("*.yaml"))
+          if not files:
+              raise SystemExit("No workflow YAML files were found.")
+          for path in files:
+              list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
+              print("YAML syntax OK:", path)
+          PY
