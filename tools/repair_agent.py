@@ -176,7 +176,7 @@ def report_context(report: dict) -> str:
         selected.append({
             "name": item.get("name"),
             "detail": redact(item.get("detail", "")),
-            "command": item.get("command", []),
+            "command": [redact(str(part)) for part in item.get("command", [])],
             "output": redact(str(item.get("output", ""))[-MAX_FAILURE_OUTPUT:]),
         })
     return json.dumps({
@@ -340,9 +340,12 @@ def main() -> int:
                     break
                 patch = extract_patch(response)
                 paths = patch_paths(patch)
-                forbidden = [p for p in paths if _is_forbidden(p, root)]
+                forbidden = [
+                    p for p in paths
+                    if _is_forbidden(p, root) or PurePosixPath(p).suffix.lower() not in SAFE_SUFFIXES
+                ]
                 if forbidden:
-                    raise ValueError("Patch touched protected or unsafe paths: " + ", ".join(forbidden))
+                    raise ValueError("Patch touched protected, unsupported, or unsafe paths: " + ", ".join(forbidden))
                 patch_file = output / ("cycle-{}.patch".format(cycle_no))
                 patch_file.write_text(patch, encoding="utf-8")
                 check = git(root, ["apply", "--check", str(patch_file)], check=False)
