@@ -1,0 +1,7 @@
+.lab-report/
+universal-code-lab-report/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
