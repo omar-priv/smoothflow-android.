@@ -55,7 +55,16 @@ class Lab:
         py = self.files("*.py")
         if py:
             self.stacks.append("Python")
-            self.run("Python syntax", [sys.executable, "-m", "compileall", "-q", str(self.root)])
+            syntax_errors = []
+            for source_file in py:
+                try:
+                    compile(source_file.read_text(encoding="utf-8"), str(source_file), "exec")
+                except Exception as exc:
+                    syntax_errors.append("{}: {}".format(source_file.relative_to(self.root), exc))
+            if syntax_errors:
+                self.record("Python syntax", "FAIL", "\\n".join(syntax_errors))
+            else:
+                self.record("Python syntax", "PASS", "{} Python files parsed without execution".format(len(py)))
             if shutil.which("ruff"):
                 self.run("Ruff lint", ["ruff", "check", str(self.root)])
             else:
@@ -64,7 +73,7 @@ class Lab:
                 if shutil.which("pytest"):
                     self.run("Pytest", ["pytest", "-q"], 300)
                 else:
-                    self.record("Pytest", "SKIP", "pytest not installed")
+                    self.run("Python unittest", [sys.executable, "-m", "unittest", "discover", "-s", "tests"], 300)
 
         for p in self.files("*.json"):
             try:
