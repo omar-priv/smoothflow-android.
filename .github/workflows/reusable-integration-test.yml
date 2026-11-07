@@ -1,10 +1,10 @@
 name: Reusable workflow integration test
 
+# Run after changes reach main, and verify the published reusable workflow.
 on:
   push:
     branches:
-      - "feat/**"
-  pull_request:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   call-reusable-lab:
-    uses: omar-priv/smoothflow-android./.github/workflows/universal-lab.yml@feat/ai-assisted-repair
+    uses: omar-priv/smoothflow-android./.github/workflows/universal-lab.yml@main
     with:
       timeout: 120
       auto_repair: false
