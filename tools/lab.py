@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-SKIP = {".git", ".venv", "venv", "node_modules", "__pycache__", ".next", "dist", "build", "target", ".gradle", "vendor"}
+SKIP = {".git", ".venv", "venv", "node_modules", "__pycache__", ".next", "dist", "build", "target", ".gradle", "vendor", ".universal-code-lab"}
 MAX_OUTPUT = 10000
 
 
