@@ -170,6 +170,18 @@ class Lab:
             self.stacks.append("Docker")
             self.run("Docker build", ["docker", "build", "-t", "universal-code-lab-check", str(self.root)], 900)
 
+        # Optional security scanners: only run when explicitly available in the environment.
+        if shutil.which("gitleaks"):
+            self.run("Gitleaks secret scan", ["gitleaks", "detect", "--source", str(self.root), "--no-git", "--redact"], 300)
+        else:
+            self.record("Gitleaks secret scan", "SKIP", "Install Gitleaks for secret scanning")
+        if shutil.which("semgrep"):
+            self.run("Semgrep security scan", ["semgrep", "scan", "--config", "auto", "--error", str(self.root)], 600)
+        else:
+            self.record("Semgrep security scan", "SKIP", "Install Semgrep for static security analysis")
+        if (self.root / "requirements.txt").exists() and shutil.which("pip-audit"):
+            self.run("Python dependency audit", ["pip-audit", "-r", str(self.root / "requirements.txt")], 300)
+
         if not self.stacks:
             self.record("Stack detection", "WARN", "No supported project manifest detected")
 
