@@ -36,10 +36,13 @@ class Lab:
             p = subprocess.run(cmd, cwd=self.root, text=True, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, timeout=timeout or self.timeout,
                                env=dict(os.environ, CI="1"), check=False)
-            self.record(name, "PASS" if p.returncode == 0 else "FAIL",
-                        "exit code {}".format(p.returncode), cmd,
-                        time.monotonic() - start, p.stdout or "")
-            return p.returncode == 0
+            status = "PASS" if p.returncode == 0 else "FAIL"
+            detail = "exit code {}".format(p.returncode)
+            if "unittest" in cmd and "Ran 0 tests" in (p.stdout or ""):
+                status = "WARN"
+                detail = "No unittest cases were discovered; this is not a test pass"
+            self.record(name, status, detail, cmd, time.monotonic() - start, p.stdout or "")
+            return status == "PASS"
         except subprocess.TimeoutExpired as e:
             out = e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
             self.record(name, "FAIL", "Timed out", cmd, time.monotonic() - start, out)
