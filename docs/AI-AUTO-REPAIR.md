@@ -25,7 +25,8 @@ The supplied example enables auto-repair on push and manual runs. Pull requests 
 
 ## Safety boundaries
 
-- The API key is passed to the repair process as an environment variable; it is not included in the prompt.
+- The API key is passed to the repair process as an environment variable; it is not included in the prompt and is removed from the environment before any project tests are rerun.
+- GitHub checkout credentials are not persisted while project code is inspected or tested. Write access is configured only in the final step that pushes the proposed branch and opens the PR.
 - Secret-like values and common token formats in report excerpts and source files are redacted before sending.
 - Automatic patches cannot modify GitHub workflow files, this lab's own runner, secret/credential paths, environment files, dependency lockfiles, or existing tests.
 - Deletions, renames, binary changes, symlinks, path traversal, and patches outside the project root are rejected.
