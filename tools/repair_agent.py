@@ -85,7 +85,10 @@ def _is_forbidden(path: str, root: Path) -> bool:
     is_test_path = any(p in {"test", "tests", "spec", "specs"} for p in parts)
     if is_test_path and (root / path).exists():
         return True
-    resolved = (root / path).resolve()
+    candidate = root / path
+    if candidate.is_symlink():
+        return True
+    resolved = candidate.resolve()
     try:
         if os.path.commonpath([str(root.resolve()), str(resolved)]) != str(root.resolve()):
             return True
@@ -123,6 +126,11 @@ def extract_patch(response: str) -> str:
         raise ValueError("AI did not return a unified diff. No files were changed.")
     if len(response) > MAX_PATCH_CHARS:
         raise ValueError("AI patch exceeded the configured size limit.")
+    if any(marker in response for marker in (
+        "GIT binary patch", "Binary files ", "deleted file mode",
+        "new file mode 120000", "old mode 120000", "rename from ", "rename to "
+    )):
+        raise ValueError("Binary changes, symlinks, deletions, and renames are blocked.")
     return response + "\n"
 
 
