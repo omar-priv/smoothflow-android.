@@ -7,7 +7,43 @@ on:
         required: false
         default: 300
         type: number
+      auto_repair:
+        required: false
+        default: false
+        type: boolean
+      ai_base_url:
+        required: false
+        default: https://api.openai.com/v1
+        type: string
+      ai_model:
+        required: false
+        default: gpt-4.1-mini
+        type: string
+    secrets:
+      AI_API_KEY:
+        required: false
   workflow_dispatch:
+    inputs:
+      timeout:
+        description: Per-check timeout in seconds
+        required: false
+        default: 300
+        type: number
+      auto_repair:
+        description: Ask the AI to propose guarded fixes and open a draft PR
+        required: false
+        default: false
+        type: boolean
+      ai_base_url:
+        description: OpenAI-compatible API base URL
+        required: false
+        default: https://api.openai.com/v1
+        type: string
+      ai_model:
+        description: Model name supported by the selected provider
+        required: false
+        default: gpt-4.1-mini
+        type: string
 
 permissions:
   contents: read
@@ -16,6 +52,8 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      lab_outcome: ${{ steps.lab.outcome }}
     steps:
       - name: Checkout target repository
         uses: actions/checkout@v4
@@ -50,8 +88,12 @@ jobs:
       - name: Run lab
         id: lab
         continue-on-error: true
-        run: python .universal-code-lab/tools/lab.py --root . --output universal-code-lab-report --timeout ${{ inputs.timeout || 300 }}
-      - name: Upload report
+        run: >-
+          python .universal-code-lab/tools/lab.py
+          --root .
+          --output universal-code-lab-report
+          --timeout ${{ inputs.timeout || 300 }}
+      - name: Upload inspection report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -59,6 +101,104 @@ jobs:
           path: universal-code-lab-report/
           if-no-files-found: warn
           retention-days: 14
-      - name: Fail if checks failed
+      - name: Fail when checks failed
         if: steps.lab.outcome == 'failure'
         run: exit 1
+
+  ai_repair:
+    needs: inspect
+    if: >-
+      always() &&
+      needs.inspect.outputs.lab_outcome == 'failure' &&
+      inputs.auto_repair &&
+      github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Checkout lab tools
+        uses: actions/checkout@v4
+        with:
+          repository: omar-priv/smoothflow-android.
+          ref: main
+          path: .universal-code-lab
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download original report
+        uses: actions/download-artifact@v4
+        with:
+          name: universal-code-lab-report
+          path: ${{ runner.temp }}/universal-code-lab-initial
+      - name: Check whether AI credentials are configured
+        id: ai_key
+        shell: bash
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+        run: |
+          if [ -n "$AI_API_KEY" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "AI_API_KEY is missing; automatic repair is skipped."
+          fi
+      - name: Run guarded AI repair loop
+        id: repair
+        if: steps.ai_key.outputs.available == 'true'
+        continue-on-error: true
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_API_BASE_URL: ${{ inputs.ai_base_url }}
+          AI_MODEL: ${{ inputs.ai_model }}
+        run: |
+          python .universal-code-lab/tools/repair_agent.py \
+            --root . \
+            --report "$RUNNER_TEMP/universal-code-lab-initial/report.json" \
+            --lab-script .universal-code-lab/tools/lab.py \
+            --output "$RUNNER_TEMP/universal-code-lab-repair" \
+            --max-cycles 2 \
+            --timeout ${{ inputs.timeout || 300 }}
+      - name: Upload AI repair and recheck reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: universal-code-lab-ai-repair
+          path: ${{ runner.temp }}/universal-code-lab-repair/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Open a draft pull request with the proposed fixes
+        if: always() && steps.repair.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_BASE: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch="universal-code-lab/repair-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          git checkout -b "$branch"
+          while IFS= read -r file; do
+            [ -n "$file" ] && git add -- "$file"
+          done < "$RUNNER_TEMP/universal-code-lab-repair/changed-files.txt"
+          if git diff --cached --quiet; then
+            echo "No source changes to commit."
+            exit 0
+          fi
+          git commit -m "fix: AI-assisted Universal Code Lab repairs"
+          git push --set-upstream origin "$branch"
+          gh pr create \
+            --draft \
+            --base "$TARGET_BASE" \
+            --head "$branch" \
+            --title "AI-assisted QA fixes from Universal Code Lab" \
+            --body-file "$RUNNER_TEMP/universal-code-lab-repair/repair-summary.md"
+      - name: Mark unresolved repairs
+        if: steps.repair.outcome == 'failure'
+        run: echo "AI repair did not reach a clean lab result. Review the repair artifact and draft PR, if created."
